@@ -1,149 +1,218 @@
-let room_id;
-let localStream;
-let screenStream;
-let peer = null;
-let connections = {};
-let screenSharing = false;
+var room_id;
+var getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+var local_stream;
+var screenStream;
+var peer = null;
+var currentPeer = null
+var screenSharing = false
 
-// Cross-browser compatible getUserMedia
-const getUserMedia = navigator.mediaDevices.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-
-// Function to create room (Teacher's function)
 function createRoom() {
-    const roomInput = document.getElementById("room-input").value.trim();
-    if (!roomInput) {
-        alert("Please enter a room number");
+    console.log("Creating Room")
+    let room = document.getElementById("room-input").value;
+    if (room == " " || room == "") {
+        alert("Please enter room number")
         return;
     }
-    room_id = roomInput;
-
-    peer = new Peer(room_id);
+    room_id = room;
+    peer = new Peer(room_id)
     peer.on('open', (id) => {
-        console.log("Room created with ID:", id);
-        notify("Waiting for students to join...");
-        startLocalStream();
-    });
-
-    peer.on('call', (call) => {
-        // Answer each incoming call with the teacher's local stream
-        call.answer(localStream);
-        call.on('stream', (remoteStream) => setRemoteStream(remoteStream, call.peer));
-        connections[call.peer] = call; // Track each connection
-    });
-
-    peer.on('error', (err) => {
-        console.error("Peer error:", err);
-        notify("Error: " + err.message);
-    });
-}
-
-// Function to join a room (Student's function)
-function joinRoom() {
-    const roomInput = document.getElementById("room-input").value.trim();
-    if (!roomInput) {
-        alert("Please enter a room number");
-        return;
-    }
-    room_id = roomInput;
-
-    peer = new Peer();
-    peer.on('open', (id) => {
-        console.log("Joining room with ID:", id);
-        notify("Connecting to teacher...");
-        const call = peer.call(room_id, new MediaStream());
-        call.on('stream', (remoteStream) => setRemoteStream(remoteStream, call.peer));
-        connections[call.peer] = call;
-    });
-
-    peer.on('error', (err) => {
-        console.error("Peer error:", err);
-        notify("Error: " + err.message);
-    });
-}
-
-// Starts local video/audio stream for the teacher
-function startLocalStream() {
-    getUserMedia({ video: true, audio: true })
-        .then((stream) => {
-            localStream = stream;
-            setLocalStream(localStream);
+        console.log("Peer Room ID: ", id)
+        getUserMedia({ video: true, audio: true }, (stream) => {
+            console.log(stream);
+            local_stream = stream;
+            setLocalStream(local_stream)
+        }, (err) => {
+            console.log(err)
         })
-        .catch((err) => console.error("Failed to get local stream:", err));
+        notify("Waiting for peer to join.")
+    })
+    peer.on('call', (call) => {
+        call.answer(local_stream);
+        call.on('stream', (stream) => {
+            console.log("got call");
+            console.log(stream);
+            setRemoteStream(stream)
+        })
+        currentPeer = call;
+    })
 }
 
-// Display local stream (Teacher's stream)
 function setLocalStream(stream) {
     document.getElementById("local-vid-container").hidden = false;
-    const video = document.getElementById("local-video");
+    let video = document.getElementById("local-video");
     video.srcObject = stream;
     video.muted = true;
     video.play();
 }
-
-// Display remote stream (Student's view of the teacher)
-function setRemoteStream(stream, peerId) {
-    const remoteContainer = document.getElementById("remote-vid-container");
-    if (!remoteContainer.querySelector(`#remote-video-${peerId}`)) {
-        const video = document.createElement("video");
-        video.id = `remote-video-${peerId}`;
-        video.srcObject = stream;
-        video.autoplay = true;
-        remoteContainer.appendChild(video);
-        remoteContainer.hidden = false;
-    }
+function setScreenSharingStream(stream) {
+    document.getElementById("screenshare-container").hidden = false;
+    let video = document.getElementById("screenshared-video");
+    video.srcObject = stream;
+    video.muted = true;
+    video.play();
+}
+function setRemoteStream(stream) {
+    document.getElementById("remote-vid-container").hidden = false;
+    let video = document.getElementById("remote-video");
+    video.srcObject = stream;
+    video.play();
 }
 
-// Start screen sharing (Teacher)
-function startScreenShare() {
-    if (screenSharing) {
-        stopScreenSharing();
+
+function notify(msg) {
+    let notification = document.getElementById("notification")
+    notification.innerHTML = msg
+    notification.hidden = false
+    setTimeout(() => {
+        notification.hidden = true;
+    }, 3000)
+}
+
+function joinRoom() {
+    console.log("Joining Room")
+    let room = document.getElementById("room-input").value;
+    if (room == " " || room == "") {
+        alert("Please enter room number")
+        return;
+    }
+    room_id = room;
+    peer = new Peer()
+    peer.on('open', (id) => {
+        console.log("Connected room with Id: " + id)
+
+        getUserMedia({ video: true, audio: false }, (stream) => {
+            local_stream = stream;
+            setLocalStream(local_stream)
+            notify("Joining peer")
+            let call = peer.call(room_id, stream)
+            call.on('stream', (stream) => {
+                setRemoteStream(stream);
+
+            })
+            currentPeer = call;
+        }, (err) => {
+            console.log(err)
+        })
+
+    })
+}
+function joinRoomWithoutCamShareScreen() {
+    // join a call and drirectly share screen, without accesing camera
+    console.log("Joining Room")
+    let room = document.getElementById("room-input").value;
+    if (room == " " || room == "") {
+        alert("Please enter room number")
+        return;
+    }
+    room_id = room;
+    peer = new Peer()
+    peer.on('open', (id) => {
+        console.log("Connected with Id: " + id)
+
+        const createMediaStreamFake = () => {
+            return new MediaStream([createEmptyAudioTrack(), createEmptyVideoTrack({ width: 640, height: 480 })]);
+        }
+
+        const createEmptyAudioTrack = () => {
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const dst = oscillator.connect(ctx.createMediaStreamDestination());
+            oscillator.start();
+            const track = dst.stream.getAudioTracks()[0];
+            return Object.assign(track, { enabled: false });
+        }
+
+        const createEmptyVideoTrack = ({ width, height }) => {
+            const canvas = Object.assign(document.createElement('canvas'), { width, height });
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "green";
+            ctx.fillRect(0, 0, width, height);
+
+            const stream = canvas.captureStream();
+            const track = stream.getVideoTracks()[0];
+
+            return Object.assign(track, { enabled: false });
+        };
+
+        notify("Joining peer")
+        let call = peer.call(room_id, createMediaStreamFake())
+        call.on('stream', (stream) => {
+            setRemoteStream(stream);
+
+        })
+
+        currentPeer = call;
+        startScreenShare();
+
+    })
+}
+
+function joinRoomShareVideoAsStream() {
+    // Play video from local media
+    console.log("Joining Room")
+    let room = document.getElementById("room-input").value;
+    if (room == " " || room == "") {
+        alert("Please enter room number")
         return;
     }
 
-    navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-        .then((stream) => {
-            screenStream = stream;
-            setScreenSharingStream(stream);
-            screenSharing = true;
+    room_id = room;
+    peer = new Peer()
+    peer.on('open', (id) => {
+        console.log("Connected with Id: " + id)
 
-            const screenTrack = screenStream.getVideoTracks()[0];
-            screenTrack.onended = () => stopScreenSharing();
+        document.getElementById("local-mdeia-container").hidden = false;
+        
+        const video = document.getElementById('local-media');
+        video.onplay = function () {
+            const stream = video.captureStream();
+            notify("Joining peer")
+            let call = peer.call(room_id, stream)
 
-            for (let peerId in connections) {
-                const sender = connections[peerId].peerConnection.getSenders().find(s => s.track.kind === screenTrack.kind);
-                if (sender) sender.replaceTrack(screenTrack);
-            }
-        })
-        .catch((err) => console.error("Error sharing screen:", err));
+            // Show remote stream on my side
+            call.on('stream', (stream) => {
+                setRemoteStream(stream);
+
+            })
+        };
+        video.play();
+    })
 }
 
-// Stop screen sharing and return to camera (Teacher)
+function startScreenShare() {
+    if (screenSharing) {
+        stopScreenSharing()
+    }
+    navigator.mediaDevices.getDisplayMedia({ video: true }).then((stream) => {
+        setScreenSharingStream(stream);
+
+        screenStream = stream;
+        let videoTrack = screenStream.getVideoTracks()[0];
+        videoTrack.onended = () => {
+            stopScreenSharing()
+        }
+        if (peer) {
+            let sender = currentPeer.peerConnection.getSenders().find(function (s) {
+                return s.track.kind == videoTrack.kind;
+            })
+            sender.replaceTrack(videoTrack)
+            screenSharing = true
+        }
+        console.log(screenStream)
+    })
+}
+
 function stopScreenSharing() {
     if (!screenSharing) return;
-    screenSharing = false;
-
-    const videoTrack = localStream.getVideoTracks()[0];
-    for (let peerId in connections) {
-        const sender = connections[peerId].peerConnection.getSenders().find(s => s.track.kind === videoTrack.kind);
-        if (sender) sender.replaceTrack(videoTrack);
+    let videoTrack = local_stream.getVideoTracks()[0];
+    if (peer) {
+        let sender = currentPeer.peerConnection.getSenders().find(function (s) {
+            return s.track.kind == videoTrack.kind;
+        })
+        sender.replaceTrack(videoTrack)
     }
-
-    screenStream.getTracks().forEach(track => track.stop());
-}
-
-// Display screen sharing stream (Teacher's view)
-function setScreenSharingStream(stream) {
-    document.getElementById("screenshare-container").hidden = false;
-    const video = document.getElementById("screenshared-video");
-    video.srcObject = stream;
-    video.muted = true;
-    video.play();
-}
-
-// Notification handler
-function notify(msg) {
-    const notification = document.getElementById("notification");
-    notification.innerHTML = msg;
-    notification.hidden = false;
-    setTimeout(() => notification.hidden = true, 3000);
+    screenStream.getTracks().forEach(function (track) {
+        track.stop();
+    });
+    screenSharing = false
 }
