@@ -5,8 +5,10 @@ let peer = null;
 let connections = {};
 let screenSharing = false;
 
+// Cross-browser compatible getUserMedia
 const getUserMedia = navigator.mediaDevices.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
 
+// Function to create room (Teacher's function)
 function createRoom() {
     const roomInput = document.getElementById("room-input").value.trim();
     if (!roomInput) {
@@ -35,6 +37,7 @@ function createRoom() {
     });
 }
 
+// Function to join a room (Student's function)
 function joinRoom() {
     const roomInput = document.getElementById("room-input").value.trim();
     if (!roomInput) {
@@ -58,6 +61,7 @@ function joinRoom() {
     });
 }
 
+// Starts local video/audio stream for the teacher
 function startLocalStream() {
     getUserMedia({ video: true, audio: true })
         .then((stream) => {
@@ -67,6 +71,7 @@ function startLocalStream() {
         .catch((err) => console.error("Failed to get local stream:", err));
 }
 
+// Display local stream (Teacher's stream)
 function setLocalStream(stream) {
     document.getElementById("local-vid-container").hidden = false;
     const video = document.getElementById("local-video");
@@ -75,6 +80,7 @@ function setLocalStream(stream) {
     video.play();
 }
 
+// Display remote stream (Student's view of the teacher)
 function setRemoteStream(stream, peerId) {
     const remoteContainer = document.getElementById("remote-vid-container");
     if (!remoteContainer.querySelector(`#remote-video-${peerId}`)) {
@@ -87,6 +93,7 @@ function setRemoteStream(stream, peerId) {
     }
 }
 
+// Start screen sharing (Teacher)
 function startScreenShare() {
     if (screenSharing) {
         stopScreenSharing();
@@ -110,6 +117,7 @@ function startScreenShare() {
         .catch((err) => console.error("Error sharing screen:", err));
 }
 
+// Stop screen sharing and return to camera (Teacher)
 function stopScreenSharing() {
     if (!screenSharing) return;
     screenSharing = false;
@@ -123,6 +131,7 @@ function stopScreenSharing() {
     screenStream.getTracks().forEach(track => track.stop());
 }
 
+// Display screen sharing stream (Teacher's view)
 function setScreenSharingStream(stream) {
     document.getElementById("screenshare-container").hidden = false;
     const video = document.getElementById("screenshared-video");
@@ -131,6 +140,7 @@ function setScreenSharingStream(stream) {
     video.play();
 }
 
+// Notification handler
 function notify(msg) {
     const notification = document.getElementById("notification");
     notification.innerHTML = msg;
